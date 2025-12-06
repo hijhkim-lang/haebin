@@ -890,6 +890,51 @@
 
         let currentLocation = null;
 
+        // WGS-84 좌표를 GCJ-02 좌표로 변환 (중국 좌표계)
+        function wgs84ToGcj02(lat, lng) {
+            const a = 6378245.0;
+            const ee = 0.00669342162296594323;
+            
+            if (outOfChina(lat, lng)) {
+                return { lat: lat, lng: lng };
+            }
+            
+            let dLat = transformLat(lng - 105.0, lat - 35.0);
+            let dLng = transformLng(lng - 105.0, lat - 35.0);
+            const radLat = lat / 180.0 * Math.PI;
+            let magic = Math.sin(radLat);
+            magic = 1 - ee * magic * magic;
+            const sqrtMagic = Math.sqrt(magic);
+            dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+            dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+            const mgLat = lat + dLat;
+            const mgLng = lng + dLng;
+            
+            return { lat: mgLat, lng: mgLng };
+        }
+        
+        function transformLat(x, y) {
+            let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+            ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin(y / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ret += (160.0 * Math.sin(y / 12.0 * Math.PI) + 320 * Math.sin(y * Math.PI / 30.0)) * 2.0 / 3.0;
+            return ret;
+        }
+        
+        function transformLng(x, y) {
+            let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+            ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin(x / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ret += (150.0 * Math.sin(x / 12.0 * Math.PI) + 300.0 * Math.sin(x / 30.0 * Math.PI)) * 2.0 / 3.0;
+            return ret;
+        }
+        
+        function outOfChina(lat, lng) {
+            if (lng < 72.004 || lng > 137.8347) return true;
+            if (lat < 0.8293 || lat > 55.8271) return true;
+            return false;
+        }
+
         // 거리 계산 (Haversine formula)
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
@@ -979,9 +1024,13 @@
             // 매번 클릭할 때마다 현재 위치를 새로 가져옴
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    console.log('=== GPS 위치 수신 ===');
-                    console.log('수신된 좌표:', position.coords.latitude, position.coords.longitude);
+                    console.log('=== GPS 위치 수신 (WGS-84) ===');
+                    console.log('수신된 좌표 (WGS-84):', position.coords.latitude, position.coords.longitude);
                     console.log('정확도:', position.coords.accuracy, '미터');
+                    
+                    // WGS-84 → GCJ-02 변환
+                    const converted = wgs84ToGcj02(position.coords.latitude, position.coords.longitude);
+                    console.log('변환된 좌표 (GCJ-02):', converted.lat, converted.lng);
                     
                     // 정확도 체크 및 경고
                     if (position.coords.accuracy > 50) {
@@ -995,14 +1044,14 @@
                         `;
                     }
                     
-                    // 현재 위치 업데이트
+                    // 현재 위치 업데이트 (GCJ-02 변환된 좌표 사용)
                     currentLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
+                        lat: converted.lat,
+                        lng: converted.lng,
                         accuracy: position.coords.accuracy
                     };
                     
-                    console.log('현재 위치 업데이트:', currentLocation);
+                    console.log('현재 위치 업데이트 (GCJ-02):', currentLocation);
                     
                     // 거리 표시
                     displayDistances();
